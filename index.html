@@ -170,29 +170,32 @@
           <input type="email" id="email" name="email" maxlength="120" placeholder="seu@email.com">
         </div>
 
-       <div class="form-group">
-  <label for="cidade">Cidade *</label>
-  <input
-    type="text"
-    id="cidade"
-    name="cidade"
-    list="listaCidadesPR"
-    required
-    maxlength="80"
-    placeholder="Comece a digitar sua cidade"
-    autocomplete="off"
-  >
-  <datalist id="listaCidadesPR"> </datalist>
-         <div class="form-group" id="outraCidadeBox" style="display:none;">
-  <label for="outraCidade">Digite sua cidade *</label>
-  <input
-    type="text"
-    id="outraCidade"
-    name="outraCidade"
-    maxlength="80"
-    placeholder="Informe sua cidade"
-  >
-</div>
+        <div class="form-group">
+          <label for="cidade">Cidade *</label>
+          <input
+            type="text"
+            id="cidade"
+            name="cidade"
+            list="listaCidadesPR"
+            required
+            maxlength="80"
+            placeholder="Comece a digitar sua cidade"
+            autocomplete="off"
+          >
+          <datalist id="listaCidadesPR"></datalist>
+        </div>
+
+        <div class="form-group" id="outraCidadeBox" style="display:none;">
+          <label for="outraCidade">Digite sua cidade *</label>
+          <input
+            type="text"
+            id="outraCidade"
+            name="outraCidade"
+            maxlength="80"
+            placeholder="Informe sua cidade"
+          >
+        </div>
+
         <div class="form-group">
           <label for="categoria">Categoria *</label>
           <select id="categoria" name="categoria" required>
@@ -225,6 +228,9 @@
     const msg = document.getElementById("msg");
     const btn = document.getElementById("btnEnviar");
     const telefone = document.getElementById("telefone");
+    const cidadeInput = document.getElementById("cidade");
+    const outraCidadeBox = document.getElementById("outraCidadeBox");
+    const outraCidadeInput = document.getElementById("outraCidade");
 
     telefone.addEventListener("input", function (e) {
       let v = e.target.value.replace(/\D/g, "");
@@ -239,6 +245,19 @@
       }
 
       e.target.value = v;
+    });
+
+    cidadeInput.addEventListener("input", function () {
+      const valor = this.value.trim();
+
+      if (valor.toLowerCase() === "outro") {
+        outraCidadeBox.style.display = "block";
+        outraCidadeInput.required = true;
+      } else {
+        outraCidadeBox.style.display = "none";
+        outraCidadeInput.required = false;
+        outraCidadeInput.value = "";
+      }
     });
 
     function mostrarMensagem(tipo, texto) {
@@ -265,8 +284,19 @@
         return "Informe um e-mail válido.";
       }
 
-      if (!dados.cidade || dados.cidade.length < 2) {
+      const cidadeEscolhida = dados.cidade.trim();
+      const cidadeNaLista = cidadesPR.includes(cidadeEscolhida);
+
+      if (!cidadeEscolhida) {
         return "Informe a cidade.";
+      }
+
+      if (!cidadeNaLista && cidadeEscolhida !== "Outro") {
+        return 'Selecione uma cidade da lista. Se não encontrar, digite "Outro".';
+      }
+
+      if (cidadeEscolhida === "Outro" && (!dados.outraCidade || dados.outraCidade.trim().length < 2)) {
+        return "Informe sua cidade no campo complementar.";
       }
 
       if (!dados.categoria) {
@@ -287,6 +317,7 @@
         telefone: form.telefone.value.trim(),
         email: form.email.value.trim(),
         cidade: form.cidade.value.trim(),
+        outraCidade: outraCidadeInput.value.trim(),
         categoria: form.categoria.value.trim(),
         website: form.website.value.trim()
       };
@@ -295,6 +326,10 @@
       if (erro) {
         mostrarMensagem("error", erro);
         return;
+      }
+
+      if (dados.cidade === "Outro") {
+        dados.cidade = dados.outraCidade;
       }
 
       btn.disabled = true;
@@ -314,6 +349,8 @@
         if (resultado.ok) {
           mostrarMensagem("success", resultado.mensagem || "Inscrição realizada com sucesso!");
           form.reset();
+          outraCidadeBox.style.display = "none";
+          outraCidadeInput.required = false;
         } else {
           mostrarMensagem("error", resultado.mensagem || "Não foi possível enviar.");
         }
@@ -324,23 +361,17 @@
         btn.textContent = "Realizar inscrição";
       }
     });
-<script>
-  const cidadeInput = document.getElementById("cidade");
-  const outraCidadeBox = document.getElementById("outraCidadeBox");
-  const outraCidadeInput = document.getElementById("outraCidade");
+  </script>
 
-  cidadeInput.addEventListener("input", function () {
-    const valor = this.value.trim();
+  <script src="cidades-pr.js"></script>
+  <script>
+    const lista = document.getElementById("listaCidadesPR");
 
-    if (valor.toLowerCase() === "outro") {
-      outraCidadeBox.style.display = "block";
-      outraCidadeInput.required = true;
-    } else {
-      outraCidadeBox.style.display = "none";
-      outraCidadeInput.required = false;
-      outraCidadeInput.value = "";
-    }
-  });
-</script>
+    cidadesPR.forEach(cidade => {
+      const option = document.createElement("option");
+      option.value = cidade;
+      lista.appendChild(option);
+    });
+  </script>
 </body>
 </html>
