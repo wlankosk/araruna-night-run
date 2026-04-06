@@ -66,6 +66,7 @@
       border: 2px solid #ddd;
       border-radius: 10px;
       font-size: 1rem;
+      background: #fff;
     }
 
     input:focus, select:focus {
@@ -118,16 +119,23 @@
       padding: 14px 20px 20px;
       color: #666;
       font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .hidden-bot-field {
+      position: absolute !important;
+      left: -9999px !important;
+      top: -9999px !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      height: 0 !important;
+      width: 0 !important;
+      overflow: hidden !important;
     }
 
     @media (max-width: 480px) {
-      .header h1 {
-        font-size: 1.3rem;
-      }
-
-      .form-body {
-        padding: 20px 16px;
-      }
+      .header h1 { font-size: 1.3rem; }
+      .form-body { padding: 20px 16px; }
     }
   </style>
 </head>
@@ -141,10 +149,10 @@
     <div class="form-body">
       <div id="msg" class="msg"></div>
 
-      <form id="inscricaoForm">
+      <form id="inscricaoForm" novalidate>
         <div class="form-group">
           <label for="nome">Nome completo *</label>
-          <input type="text" id="nome" name="nome" required placeholder="Seu nome completo">
+          <input type="text" id="nome" name="nome" required maxlength="120" placeholder="Seu nome completo">
         </div>
 
         <div class="form-group">
@@ -154,12 +162,12 @@
 
         <div class="form-group">
           <label for="telefone">Telefone *</label>
-          <input type="tel" id="telefone" name="telefone" required placeholder="(44) 99999-9999">
+          <input type="tel" id="telefone" name="telefone" required maxlength="16" placeholder="(44) 99999-9999">
         </div>
 
         <div class="form-group">
           <label for="email">E-mail</label>
-          <input type="email" id="email" name="email" placeholder="seu@email.com">
+          <input type="email" id="email" name="email" maxlength="120" placeholder="seu@email.com">
         </div>
 
         <div class="form-group">
@@ -172,17 +180,23 @@
           </select>
         </div>
 
+        <div class="hidden-bot-field" aria-hidden="true">
+          <label for="website">Não preencha este campo</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
         <button type="submit" id="btnEnviar">Realizar inscrição</button>
       </form>
     </div>
 
     <div class="footer">
-      Prefeitura de Araruna • Inscrição online
+      Prefeitura de Araruna • Inscrição online<br>
+      Preencha apenas os dados necessários para a inscrição.
     </div>
   </div>
 
   <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLzPsVssRWtVX8VWe6_HbZlfqAOXukb8D8Cm6pXXQ5qrqQZ_syPieetEEDOIUl4NuT/exec";
+    const SCRIPT_URL = "COLE_AQUI_URL_DO_APPS_SCRIPT";
 
     const form = document.getElementById("inscricaoForm");
     const msg = document.getElementById("msg");
@@ -194,9 +208,9 @@
       if (v.length > 11) v = v.slice(0, 11);
 
       if (v.length > 6) {
-        v = "(" + v.slice(0,2) + ") " + v.slice(2,7) + "-" + v.slice(7);
+        v = "(" + v.slice(0, 2) + ") " + v.slice(2, 7) + "-" + v.slice(7);
       } else if (v.length > 2) {
-        v = "(" + v.slice(0,2) + ") " + v.slice(2);
+        v = "(" + v.slice(0, 2) + ") " + v.slice(2);
       } else if (v.length > 0) {
         v = "(" + v;
       }
@@ -209,21 +223,50 @@
       msg.textContent = texto;
     }
 
+    function validarDados(dados) {
+      if (!dados.nome || dados.nome.length < 3) {
+        return "Informe um nome válido.";
+      }
+
+      const idadeNum = Number(dados.idade);
+      if (!dados.idade || Number.isNaN(idadeNum) || idadeNum < 5 || idadeNum > 120) {
+        return "Informe uma idade válida.";
+      }
+
+      const telefoneNumeros = dados.telefone.replace(/\D/g, "");
+      if (telefoneNumeros.length < 10 || telefoneNumeros.length > 11) {
+        return "Informe um telefone válido com DDD.";
+      }
+
+      if (dados.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dados.email)) {
+        return "Informe um e-mail válido.";
+      }
+
+      return null;
+    }
+
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       msg.className = "msg";
       msg.textContent = "";
-
-      btn.disabled = true;
-      btn.textContent = "Enviando...";
 
       const dados = {
         nome: form.nome.value.trim(),
         idade: form.idade.value.trim(),
         telefone: form.telefone.value.trim(),
         email: form.email.value.trim(),
-        categoria: form.categoria.value.trim()
+        categoria: form.categoria.value.trim(),
+        website: form.website.value.trim()
       };
+
+      const erro = validarDados(dados);
+      if (erro) {
+        mostrarMensagem("error", erro);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Enviando...";
 
       try {
         const resposta = await fetch(SCRIPT_URL, {
@@ -242,7 +285,7 @@
         } else {
           mostrarMensagem("error", resultado.mensagem || "Não foi possível enviar.");
         }
-      } catch (erro) {
+      } catch (erroRede) {
         mostrarMensagem("error", "Erro de conexão. Tente novamente em instantes.");
       } finally {
         btn.disabled = false;
