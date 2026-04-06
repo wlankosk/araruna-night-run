@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inscrição - Araruna Night Run 2026</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0a0a2e 0%, #1a1a4e 50%, #0d0d3d 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      background: rgba(255,255,255,0.96);
+      border-radius: 18px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(90deg, #ff6b00, #ff3d00);
+      color: #fff;
+      padding: 28px 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .header p {
+      font-size: 0.95rem;
+      opacity: 0.95;
+    }
+
+    .form-body {
+      padding: 24px 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: #333;
+      font-size: 0.92rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 13px 14px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #ff6b00;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #ff6b00, #ff3d00);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    .msg {
+      margin-bottom: 16px;
+      padding: 13px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+
+    .msg.success {
+      display: block;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #a5d6a7;
+    }
+
+    .msg.error {
+      display: block;
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 14px 20px 20px;
+      color: #666;
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 480px) {
+      .header h1 {
+        font-size: 1.3rem;
+      }
+
+      .form-body {
+        padding: 20px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Araruna Night Run</h1>
+      <p>Formulário de Inscrição 2026</p>
+    </div>
+
+    <div class="form-body">
+      <div id="msg" class="msg"></div>
+
+      <form id="inscricaoForm">
+        <div class="form-group">
+          <label for="nome">Nome completo *</label>
+          <input type="text" id="nome" name="nome" required placeholder="Seu nome completo">
+        </div>
+
+        <div class="form-group">
+          <label for="idade">Idade *</label>
+          <input type="number" id="idade" name="idade" required min="5" max="120" placeholder="Sua idade">
+        </div>
+
+        <div class="form-group">
+          <label for="telefone">Telefone *</label>
+          <input type="tel" id="telefone" name="telefone" required placeholder="(44) 99999-9999">
+        </div>
+
+        <div class="form-group">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" placeholder="seu@email.com">
+        </div>
+
+        <div class="form-group">
+          <label for="categoria">Categoria</label>
+          <select id="categoria" name="categoria">
+            <option value="">Selecione...</option>
+            <option value="5K">5K - Corrida</option>
+            <option value="10K">10K - Corrida</option>
+            <option value="Caminhada">Caminhada</option>
+          </select>
+        </div>
+
+        <button type="submit" id="btnEnviar">Realizar inscrição</button>
+      </form>
+    </div>
+
+    <div class="footer">
+      Prefeitura de Araruna • Inscrição online
+    </div>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLzPsVssRWtVX8VWe6_HbZlfqAOXukb8D8Cm6pXXQ5qrqQZ_syPieetEEDOIUl4NuT/exec";
+
+    const form = document.getElementById("inscricaoForm");
+    const msg = document.getElementById("msg");
+    const btn = document.getElementById("btnEnviar");
+    const telefone = document.getElementById("telefone");
+
+    telefone.addEventListener("input", function (e) {
+      let v = e.target.value.replace(/\D/g, "");
+      if (v.length > 11) v = v.slice(0, 11);
+
+      if (v.length > 6) {
+        v = "(" + v.slice(0,2) + ") " + v.slice(2,7) + "-" + v.slice(7);
+      } else if (v.length > 2) {
+        v = "(" + v.slice(0,2) + ") " + v.slice(2);
+      } else if (v.length > 0) {
+        v = "(" + v;
+      }
+
+      e.target.value = v;
+    });
+
+    function mostrarMensagem(tipo, texto) {
+      msg.className = "msg " + tipo;
+      msg.textContent = texto;
+    }
+
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      msg.className = "msg";
+      msg.textContent = "";
+
+      btn.disabled = true;
+      btn.textContent = "Enviando...";
+
+      const dados = {
+        nome: form.nome.value.trim(),
+        idade: form.idade.value.trim(),
+        telefone: form.telefone.value.trim(),
+        email: form.email.value.trim(),
+        categoria: form.categoria.value.trim()
+      };
+
+      try {
+        const resposta = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify(dados)
+        });
+
+        const resultado = await resposta.json();
+
+        if (resultado.ok) {
+          mostrarMensagem("success", resultado.mensagem || "Inscrição realizada com sucesso!");
+          form.reset();
+        } else {
+          mostrarMensagem("error", resultado.mensagem || "Não foi possível enviar.");
+        }
+      } catch (erro) {
+        mostrarMensagem("error", "Erro de conexão. Tente novamente em instantes.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Realizar inscrição";
+      }
+    });
+  </script>
+</body>
+</html>
