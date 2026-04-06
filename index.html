@@ -171,8 +171,13 @@
         </div>
 
         <div class="form-group">
-          <label for="categoria">Categoria</label>
-          <select id="categoria" name="categoria">
+          <label for="cidade">Cidade *</label>
+          <input type="text" id="cidade" name="cidade" required maxlength="80" placeholder="Sua cidade">
+        </div>
+
+        <div class="form-group">
+          <label for="categoria">Categoria *</label>
+          <select id="categoria" name="categoria" required>
             <option value="">Selecione...</option>
             <option value="5K">5K - Corrida</option>
             <option value="10K">10K - Corrida</option>
@@ -196,7 +201,7 @@
   </div>
 
   <script>
-    const SCRIPT_URL = "COLE_AQUI_URL_DO_APPS_SCRIPT";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyL54Fr6OO4lp_sUI7uvPAXnmcYHI8O79udtDjGZGWTXcczQa1_r_LEC9cN2o9GCNLT/exec";
 
     const form = document.getElementById("inscricaoForm");
     const msg = document.getElementById("msg");
@@ -242,6 +247,14 @@
         return "Informe um e-mail válido.";
       }
 
+      if (!dados.cidade || dados.cidade.length < 2) {
+        return "Informe a cidade.";
+      }
+
+      if (!dados.categoria) {
+        return "Selecione uma categoria.";
+      }
+
       return null;
     }
 
@@ -255,6 +268,7 @@
         idade: form.idade.value.trim(),
         telefone: form.telefone.value.trim(),
         email: form.email.value.trim(),
+        cidade: form.cidade.value.trim(),
         categoria: form.categoria.value.trim(),
         website: form.website.value.trim()
       };
