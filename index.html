@@ -182,7 +182,16 @@
     placeholder="Comece a digitar sua cidade"
     autocomplete="off"
   >
-  <datalist id="listaCidadesPR"></datalist>
+  <datalist id="listaCidadesPR"> </datalist>
+         <div class="form-group" id="outraCidadeBox" style="display:none;">
+  <label for="outraCidade">Digite sua cidade *</label>
+  <input
+    type="text"
+    id="outraCidade"
+    name="outraCidade"
+    maxlength="80"
+    placeholder="Informe sua cidade"
+  >
 </div>
         <div class="form-group">
           <label for="categoria">Categoria *</label>
@@ -315,17 +324,23 @@
         btn.textContent = "Realizar inscrição";
       }
     });
-  </script>
+<script>
+  const cidadeInput = document.getElementById("cidade");
+  const outraCidadeBox = document.getElementById("outraCidadeBox");
+  const outraCidadeInput = document.getElementById("outraCidade");
 
-  <script src="cidades-pr.js"></script>
-  <script>
-    const lista = document.getElementById("listaCidadesPR");
+  cidadeInput.addEventListener("input", function () {
+    const valor = this.value.trim();
 
-    cidadesPR.forEach(cidade => {
-      const option = document.createElement("option");
-      option.value = cidade;
-      lista.appendChild(option);
-    });
-  </script>
+    if (valor.toLowerCase() === "outro") {
+      outraCidadeBox.style.display = "block";
+      outraCidadeInput.required = true;
+    } else {
+      outraCidadeBox.style.display = "none";
+      outraCidadeInput.required = false;
+      outraCidadeInput.value = "";
+    }
+  });
+</script>
 </body>
 </html>
