@@ -127,6 +127,32 @@ const SpriteLoader = (() => {
   return { get };
 })();
 
+/* ---------- carregamento opcional de cenário real (PNG/JPG) ----------
+   Diferente do SpriteLoader, aqui não existe placeholder de 1x1 — se o
+   arquivo não existir, cai silenciosamente (sem quebrar) no cenário
+   desenhado por código em game.js. */
+const SceneryLoader = (() => {
+  const cache = {};
+  const FILES = {
+    'cave-interior': 'assets/scenery/cave-interior.jpg',
+    'cave-mouth': 'assets/scenery/cave-mouth.png'
+  };
+
+  function tryLoad(key, path) {
+    const entry = { loaded: false, img: null };
+    const img = new Image();
+    img.onload = () => { entry.loaded = true; entry.img = img; };
+    img.onerror = () => { entry.loaded = false; };
+    img.src = path;
+    cache[key] = entry;
+  }
+
+  Object.entries(FILES).forEach(([key, path]) => tryLoad(key, path));
+
+  function get(key) { return cache[key] || { loaded: false, img: null }; }
+  return { get };
+})();
+
 /* ---------- utilidades de desenho ---------- */
 function _roundRect(ctx, x, y, w, h, r) {
   if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };

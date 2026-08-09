@@ -1134,6 +1134,12 @@
 
   function drawCaveMouthVisual() {
     const m = WORLD2.caveMouth;
+    const art = SceneryLoader.get('cave-mouth');
+    if (art.loaded) {
+      const w = 300, h = w * (art.img.naturalHeight / art.img.naturalWidth);
+      ctx.drawImage(art.img, m.x - w / 2, m.y - h * 0.66, w, h);
+      return;
+    }
     ctx.save();
     ctx.fillStyle = '#2a2430';
     ctx.beginPath(); ctx.ellipse(m.x, m.y, 70, 95, 0, 0, Math.PI * 2); ctx.fill();
@@ -1218,26 +1224,49 @@
   }
 
   /* ---- desenho: interior da gruta ---- */
+  function drawCaveBackgroundArt(vw, vh) {
+    // fundo real pintado, usado como "parallax": a imagem cobre a tela
+    // inteira e desliza mais devagar que a câmera, sem precisar ser larga
+    // o bastante para cobrir literalmente todo o corredor de 2100px.
+    const art = SceneryLoader.get('cave-interior').img;
+    const coverScale = Math.max(vw / art.naturalWidth, vh / art.naturalHeight) * 1.35;
+    const drawW = art.naturalWidth * coverScale, drawH = art.naturalHeight * coverScale;
+    const baseX = Game.camera.x + (vw - drawW) / 2;
+    const parallaxShift = -Game.camera.x * 0.25;
+    const drawX = clamp(baseX + parallaxShift, Game.camera.x + vw - drawW, Game.camera.x);
+    const drawY = Game.camera.y + vh - drawH;
+    ctx.drawImage(art, drawX, drawY, drawW, drawH);
+
+    // véu escuro por cima pra casar com a paleta sombria da gruta
+    ctx.fillStyle = 'rgba(10,6,16,0.32)';
+    ctx.fillRect(Game.camera.x, Game.camera.y, vw, vh);
+  }
+
   function drawCaveBackground() {
     const vw = canvas.clientWidth, vh = canvas.clientHeight;
-    const grad = ctx.createLinearGradient(0, Game.camera.y, 0, Game.camera.y + vh);
-    grad.addColorStop(0, '#4a4258');
-    grad.addColorStop(1, '#2a2436');
-    ctx.fillStyle = grad;
-    ctx.fillRect(Game.camera.x, Game.camera.y, vw, vh);
+    const art = SceneryLoader.get('cave-interior');
+    if (art.loaded) {
+      drawCaveBackgroundArt(vw, vh);
+    } else {
+      const grad = ctx.createLinearGradient(0, Game.camera.y, 0, Game.camera.y + vh);
+      grad.addColorStop(0, '#4a4258');
+      grad.addColorStop(1, '#2a2436');
+      ctx.fillStyle = grad;
+      ctx.fillRect(Game.camera.x, Game.camera.y, vw, vh);
+
+      for (const r of CAVE.decorRocks) {
+        ctx.save();
+        ctx.fillStyle = '#584d68';
+        ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.beginPath(); ctx.ellipse(r.x - r.r * 0.3, r.y - r.r * 0.3, r.r * 0.3, r.r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
 
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(Game.camera.x, 0, vw, 40);
     ctx.fillRect(Game.camera.x, CAVE.height - 40, vw, 40);
-
-    for (const r of CAVE.decorRocks) {
-      ctx.save();
-      ctx.fillStyle = '#584d68';
-      ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.beginPath(); ctx.ellipse(r.x - r.r * 0.3, r.y - r.r * 0.3, r.r * 0.3, r.r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
 
     for (const d of CAVE.drips) {
       const drop = (Game.time * 60 + d.phase * 40) % 120;
