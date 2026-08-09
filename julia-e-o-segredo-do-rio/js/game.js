@@ -19,6 +19,11 @@
   const portraitCanvas = el('portrait-canvas');
   const portraitCtx = portraitCanvas.getContext('2d');
 
+  // canvas auxiliar (fora da tela) só para montar a máscara de escuridão da
+  // gruta sem destruir os pixels da cena já desenhada no canvas principal.
+  const darknessCanvas = document.createElement('canvas');
+  const darknessCtx = darknessCanvas.getContext('2d');
+
   const hud = {
     pause: el('btn-pause'), map: el('btn-map'), fullscreen: el('btn-fullscreen'),
     questBanner: el('quest-banner'), interactPrompt: el('interact-prompt'),
@@ -1216,8 +1221,8 @@
   function drawCaveBackground() {
     const vw = canvas.clientWidth, vh = canvas.clientHeight;
     const grad = ctx.createLinearGradient(0, Game.camera.y, 0, Game.camera.y + vh);
-    grad.addColorStop(0, '#241f2c');
-    grad.addColorStop(1, '#140f1a');
+    grad.addColorStop(0, '#4a4258');
+    grad.addColorStop(1, '#2a2436');
     ctx.fillStyle = grad;
     ctx.fillRect(Game.camera.x, Game.camera.y, vw, vh);
 
@@ -1227,8 +1232,10 @@
 
     for (const r of CAVE.decorRocks) {
       ctx.save();
-      ctx.fillStyle = '#332a3d';
+      ctx.fillStyle = '#584d68';
       ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath(); ctx.ellipse(r.x - r.r * 0.3, r.y - r.r * 0.3, r.r * 0.3, r.r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
@@ -1278,19 +1285,47 @@
 
     ctx.restore();
 
-    // escuridão em espaço de tela (independe da câmera)
+    // escuridão em espaço de tela (independe da câmera).
+    // o raio é relativo ao tamanho da tela (não pixels fixos), senão em telas
+    // grandes/tela cheia o círculo de luz fica minúsculo e quase invisível.
+    //
+    // a máscara é montada num canvas AUXILIAR (fora da tela) e só depois
+    // colada por cima da cena — desenhar o preto+furo direto no canvas
+    // principal apagaria os pixels da cena (destination-out não "revela"
+    // nada, só apaga o que está ali, e o preto já tinha sobrescrito tudo).
     const px = Game.player.x - Game.camera.x, py = Game.player.y - Game.camera.y;
-    const radius = Game.flashlightOn ? 190 : 60;
-    ctx.save();
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, vw, vh);
-    ctx.globalCompositeOperation = 'destination-out';
-    const grad = ctx.createRadialGradient(px, py - 10, radius * 0.15, px, py - 10, radius);
+    const base = Math.min(vw, vh);
+    const radius = Game.flashlightOn ? base * 0.62 : base * 0.16;
+
+    if (darknessCanvas.width !== vw || darknessCanvas.height !== vh) {
+      darknessCanvas.width = vw;
+      darknessCanvas.height = vh;
+    }
+    darknessCtx.globalCompositeOperation = 'source-over';
+    darknessCtx.fillStyle = '#000';
+    darknessCtx.fillRect(0, 0, vw, vh);
+    darknessCtx.globalCompositeOperation = 'destination-out';
+    const grad = darknessCtx.createRadialGradient(px, py - 10, radius * 0.15, px, py - 10, radius);
     grad.addColorStop(0, 'rgba(0,0,0,1)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(px, py - 10, radius, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
+    darknessCtx.fillStyle = grad;
+    darknessCtx.beginPath(); darknessCtx.arc(px, py - 10, radius, 0, Math.PI * 2); darknessCtx.fill();
+
+    ctx.drawImage(darknessCanvas, 0, 0);
+
+    // brilho quente por cima da área revelada — sem isso, "revelar o fundo
+    // escuro" não parece luz de verdade, só "menos preto".
+    if (Game.flashlightOn) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const warm = ctx.createRadialGradient(px, py - 10, 0, px, py - 10, radius);
+      warm.addColorStop(0, 'rgba(255,238,190,0.55)');
+      warm.addColorStop(0.5, 'rgba(255,220,150,0.22)');
+      warm.addColorStop(1, 'rgba(255,220,150,0)');
+      ctx.fillStyle = warm;
+      ctx.beginPath(); ctx.arc(px, py - 10, radius, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
   }
 
   /* ---------------- loop principal ---------------- */
@@ -1588,6 +1623,13 @@
       document.exitFullscreen().catch(() => {});
     }
   });
+
+  // Entrar/sair da tela cheia nem sempre dispara 'resize' de forma confiável
+  // (especialmente no Chrome mobile) — sem isso, o canvas interno ficava com
+  // a resolução antiga enquanto a caixa CSS crescia para tela cheia, deixando
+  // tudo desalinhado/escuro demais dentro da gruta.
+  document.addEventListener('fullscreenchange', () => { resizeCanvas(); checkOrientation(); });
+  document.addEventListener('webkitfullscreenchange', () => { resizeCanvas(); checkOrientation(); });
 
   function refreshContinueButton() {
     el('btn-continue').hidden = !SaveSystem.hasSave();
