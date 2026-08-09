@@ -74,6 +74,19 @@ const CHARACTERS = {
     fala: 'sim, ela fala. Tem uma voz extremamente fraquinha.',
     personalidade: 'quieta, observadora, muito gentil.',
     aparencia: 'bonita, lisa e brilhante. Não tem olhos — só um pequeno risco como boca.'
+  },
+  tigroso: {
+    nome: 'Tigroso',
+    tipo: 'vilão recorrente — tigre antropomórfico.',
+    descricao: 'anda sobre duas pernas, patas dianteiras funcionam como mãos, consegue voar, ' +
+      'NÃO possui cauda, cabelo humano curto e loiro, expressão de mau.',
+    personalidade: 'provocador, gosta de desafiar Júlia, mas não é violento — prefere fugir a lutar.'
+  },
+  aranha: {
+    nome: 'Aranha gigante da gruta',
+    tipo: 'inimigo — não fala.',
+    estados: 'SLEEPING (dormindo), WAKING (acordando), AWAKE (acordada), ATTACKING (atacando).',
+    comportamento: 'detecta luz e movimento; volta a dormir se Júlia apagar a lanterna e ficar parada a tempo.'
   }
 };
 
@@ -101,7 +114,8 @@ const SpriteLoader = (() => {
 
   // pré-carrega tudo que o jogo pode precisar; se faltar, cai no placeholder.
   const KEYS = ['julia', 'lia', 'jasmim', 'wagner', 'chatgpt', 'pedra',
-    'macaquildo', 'macaquildo_tail', 'macaquildo_eyes'];
+    'macaquildo', 'macaquildo_tail', 'macaquildo_eyes',
+    'tigroso', 'aranha-dormindo', 'aranha-acordada', 'lanterna'];
   KEYS.forEach(k => tryLoad(`assets/characters/${k}.png`));
   KEYS.forEach(k => tryLoad(`assets/characters/${k}_portrait.png`));
 
@@ -524,12 +538,162 @@ function drawPedraPlaceholder(ctx, x, y, opts = {}) {
   ctx.restore();
 }
 
+/* ---------- Tigroso (placeholder — o PNG real já está incluído no projeto) ---------- */
+function drawTigrosoPlaceholder(ctx, x, y, opts = {}) {
+  const { scale = 1, wingPhase = 0, facing = 'down' } = opts;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale((facing === 'left' ? -1 : 1) * scale, scale);
+  _shadow(ctx, 0, 4, 20);
+
+  // asas de morcego atrás do corpo
+  ctx.fillStyle = '#3a1f1f';
+  const wf = Math.sin(wingPhase) * 8;
+  [-1, 1].forEach(side => {
+    ctx.beginPath();
+    ctx.moveTo(side * 10, -46);
+    ctx.quadraticCurveTo(side * 44, -60 - wf, side * 42, -20);
+    ctx.quadraticCurveTo(side * 24, -26, side * 10, -20);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  // pernas
+  ctx.fillStyle = '#e08a3a';
+  _roundRect(ctx, -10, 4, 8, 18, 3); ctx.fill();
+  _roundRect(ctx, 2, 4, 8, 18, 3); ctx.fill();
+
+  // corpo (jaqueta escura, roqueiro)
+  ctx.fillStyle = '#22181a';
+  _roundRect(ctx, -13, -34, 26, 38, 6); ctx.fill();
+  ctx.fillStyle = '#c0392b';
+  _roundRect(ctx, -5, -30, 10, 22, 2); ctx.fill();
+
+  // braços/patas dianteiras
+  ctx.fillStyle = '#e08a3a';
+  _roundRect(ctx, -19, -28, 7, 20, 3); ctx.fill();
+  _roundRect(ctx, 12, -28, 7, 20, 3); ctx.fill();
+
+  // cabeça de tigre
+  ctx.fillStyle = '#e8822f';
+  ctx.beginPath(); ctx.arc(0, -46, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff7ec';
+  _blob(ctx, 0, -40, 9, 6); ctx.fill();
+  // listras
+  ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2;
+  [[-9, -54, -4, -48], [9, -54, 4, -48], [-11, -44, -6, -42], [11, -44, 6, -42]].forEach(([x1, y1, x2, y2]) => {
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  });
+  // orelhas
+  ctx.fillStyle = '#e8822f';
+  ctx.beginPath(); ctx.arc(-11, -58, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(11, -58, 5, 0, Math.PI * 2); ctx.fill();
+  // cabelo loiro espetado
+  ctx.fillStyle = '#e0c24a';
+  ctx.beginPath();
+  ctx.moveTo(-10, -58); ctx.lineTo(-4, -70); ctx.lineTo(0, -58);
+  ctx.lineTo(4, -71); ctx.lineTo(9, -58);
+  ctx.closePath(); ctx.fill();
+  // olhos malvados
+  ctx.fillStyle = '#7a5aa8';
+  ctx.beginPath(); ctx.ellipse(-5, -47, 2.6, 2, -0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(5, -47, 2.6, 2, 0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(-8, -51); ctx.lineTo(-2, -49); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(8, -51); ctx.lineTo(2, -49); ctx.stroke();
+  // sorriso maroto
+  ctx.strokeStyle = '#2a1a10';
+  ctx.beginPath(); ctx.moveTo(-4, -39); ctx.quadraticCurveTo(0, -35, 5, -40); ctx.stroke();
+
+  ctx.restore();
+}
+
+/* ---------- Aranha gigante (placeholder — o PNG real já está incluído) ---------- */
+function drawAranhaPlaceholder(ctx, x, y, opts = {}) {
+  const { scale = 1, state = 'sleeping', legPhase = 0 } = opts;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  _shadow(ctx, 0, 10, 46);
+
+  const jitter = state === 'attacking' ? Math.sin(legPhase * 30) * 4 : 0;
+  ctx.translate(jitter, 0);
+
+  ctx.strokeStyle = '#2a1030'; ctx.lineWidth = 5;
+  for (let i = 0; i < 4; i++) {
+    const spread = state === 'sleeping' ? 0.35 : 0.55;
+    const a1 = -spread - i * 0.22, a2 = spread + i * 0.22;
+    const legWiggle = state === 'attacking' ? Math.sin(legPhase * 10 + i) * 6 : 0;
+    [a1, a2].forEach(a => {
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(Math.sin(a) * 40, -6 + Math.cos(a) * 18 + legWiggle);
+      ctx.lineTo(Math.sin(a) * 50, 6 + Math.cos(a) * 22 + legWiggle);
+      ctx.stroke();
+    });
+  }
+
+  ctx.fillStyle = '#3a2040';
+  ctx.beginPath(); ctx.ellipse(0, 6, 26, 20, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4a2a55';
+  ctx.beginPath(); ctx.ellipse(2, -14, 16, 14, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (state === 'sleeping') {
+    ctx.strokeStyle = '#1a0a20'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-4, -14); ctx.lineTo(2, -14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -14); ctx.lineTo(12, -14); ctx.stroke();
+    ctx.fillStyle = 'rgba(180,120,220,0.8)';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('Z', 14, -30 - Math.sin(legPhase) * 3);
+  } else {
+    const eyeColor = state === 'attacking' ? '#ff3b3b' : '#c264e0';
+    ctx.fillStyle = eyeColor;
+    [[-6, -16], [2, -18], [8, -14], [-2, -12]].forEach(([ex, ey]) => {
+      ctx.beginPath(); ctx.arc(ex, ey, state === 'attacking' ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  ctx.restore();
+}
+
+/* ---------- Lanterna (ícone simples — HUD/inventário) ---------- */
+function drawLanternaPlaceholder(ctx, x, y, opts = {}) {
+  const { scale = 1, on = false } = opts;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  if (on) {
+    const grad = ctx.createRadialGradient(0, -4, 2, 0, -4, 26);
+    grad.addColorStop(0, 'rgba(255,244,190,0.9)');
+    grad.addColorStop(1, 'rgba(255,244,190,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(0, -4, 26, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#4a4a52';
+  _roundRect(ctx, -6, -10, 12, 18, 2); ctx.fill();
+  ctx.fillStyle = on ? '#fff4be' : '#cfd4dc';
+  _roundRect(ctx, -7, -16, 14, 8, 2); ctx.fill();
+  ctx.fillStyle = '#2c2c32';
+  _roundRect(ctx, -3, 8, 6, 6, 1); ctx.fill();
+  ctx.restore();
+}
+
 /* ---------- fábrica: desenha personagem por chave, usando PNG se existir ---------- */
 function drawCharacter(ctx, key, x, y, opts = {}) {
   const sprite = SpriteLoader.get(key, false);
   if (sprite.loaded) {
-    const w = opts.imgW || 48, h = opts.imgH || 64;
-    ctx.drawImage(sprite.img, x - w / 2, y - h, w, h);
+    // mantém a proporção real da arte (nunca esticar/achatar): a altura-base é
+    // fixa e a largura é derivada do aspecto natural da imagem.
+    const baseH = (opts.imgH || 74) * (opts.scale || 1);
+    const ratio = sprite.img.naturalWidth / sprite.img.naturalHeight;
+    const w = baseH * ratio, h = baseH;
+    ctx.save();
+    if (opts.facing === 'left') {
+      ctx.translate(x, 0); ctx.scale(-1, 1);
+      ctx.drawImage(sprite.img, -w / 2, y - h, w, h);
+    } else {
+      ctx.drawImage(sprite.img, x - w / 2, y - h, w, h);
+    }
+    ctx.restore();
     return;
   }
   switch (key) {
@@ -566,6 +730,18 @@ function drawCharacter(ctx, key, x, y, opts = {}) {
     case 'pedra':
       drawPedraPlaceholder(ctx, x, y, opts);
       break;
+    case 'tigroso':
+      drawTigrosoPlaceholder(ctx, x, y, opts);
+      break;
+    case 'aranha-dormindo':
+      drawAranhaPlaceholder(ctx, x, y, { ...opts, state: 'sleeping' });
+      break;
+    case 'aranha-acordada':
+      drawAranhaPlaceholder(ctx, x, y, { ...opts, state: opts.state || 'awake' });
+      break;
+    case 'lanterna':
+      drawLanternaPlaceholder(ctx, x, y, opts);
+      break;
     default:
       ctx.fillStyle = '#888';
       ctx.fillRect(x - 10, y - 20, 20, 20);
@@ -577,7 +753,11 @@ function drawPortrait(ctx, key, w, h, opts = {}) {
   ctx.clearRect(0, 0, w, h);
   const sprite = SpriteLoader.get(key, true);
   if (sprite.loaded) {
-    ctx.drawImage(sprite.img, 0, 0, w, h);
+    // "contain": preserva a proporção da arte, centralizada e apoiada embaixo.
+    const iw = sprite.img.naturalWidth, ih = sprite.img.naturalHeight;
+    const fit = Math.min(w / iw, h / ih);
+    const dw = iw * fit, dh = ih * fit;
+    ctx.drawImage(sprite.img, (w - dw) / 2, h - dh, dw, dh);
     return;
   }
   // fundo suave

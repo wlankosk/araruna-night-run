@@ -22,13 +22,16 @@
   const hud = {
     pause: el('btn-pause'), map: el('btn-map'), fullscreen: el('btn-fullscreen'),
     questBanner: el('quest-banner'), interactPrompt: el('interact-prompt'),
-    toast: el('toast'), rotateHint: el('rotate-hint')
+    toast: el('toast'), rotateHint: el('rotate-hint'),
+    flashlight: el('btn-flashlight'), itemFound: el('item-found'),
+    itemFoundIcon: el('item-found-icon'), itemFoundText: el('item-found-text')
   };
   const dlg = {
     box: el('dialogue-box'), name: el('dialogue-name'), text: el('dialogue-text')
   };
   const overlays = {
-    map: el('map-overlay'), pause: el('pause-overlay'), end: el('chapter-end-overlay')
+    map: el('map-overlay'), pause: el('pause-overlay'), end: el('chapter-end-overlay'),
+    transition: el('chapter-transition'), gameover: el('gameover-overlay')
   };
 
   const PLAYER_RADIUS = 12;
@@ -37,22 +40,53 @@
 
   /* ---------------- estado do jogo ---------------- */
   const Game = {
-    state: 'menu', // menu | howto | playing | dialogue | paused | mapoverlay | cutscene | chapterend
+    state: 'menu', // menu | howto | playing | dialogue | paused | mapoverlay | cutscene | chapterend | transition | gameover
     stateBeforeOverlay: 'playing',
     flags: null,
     inventory: [],
+    chapter: 1,
+    zone: 'outdoor', // outdoor (cap.1) | outdoor2 | cave (cap.2)
+    world: WORLD,
     player: { x: WORLD.spawn.x, y: WORLD.spawn.y, facing: 'down', walking: false, walkPhase: 0 },
     camera: { x: 0, y: 0 },
     keys: new Set(),
     touchVector: { x: 0, y: 0 },
     dialogue: { queue: [], index: -1, charIndex: 0, typing: false, onComplete: null, speedCharsPerSec: 45, timer: 0 },
-    cutscene: { active: false, macaquildoStage: 'hidden' },
+    cutscene: { active: false, macaquildoStage: 'hidden', tigrosoShadow: 0 },
     toastTimer: null,
+    itemFoundTimer: null,
     lastTime: 0,
-    time: 0
+    time: 0,
+
+    // ---- Capítulo 2 ----
+    flashlightOn: false,
+    tigroso: {
+      metStarted: false, nextIndex: 0, anchorIndex: 0, idleTimer: 0, hintsGiven: 0, fleeing: false
+    },
+    spider: {
+      state: 'sleeping', litTimer: 0, wakeThreshold: 3, reactionTimer: 0, reactionWindow: 0.9,
+      searchTimer: 0, attackTimer: 0
+    }
   };
 
+  function randRange(min, max) { return min + Math.random() * (max - min); }
+  function resetSpider() {
+    Game.spider = {
+      state: 'sleeping', litTimer: 0,
+      wakeThreshold: randRange(CAVE.spider.sleepMin, CAVE.spider.sleepMax),
+      reactionTimer: 0, reactionWindow: randRange(CAVE.spider.reactionMin, CAVE.spider.reactionMax),
+      searchTimer: 0, attackTimer: 0
+    };
+  }
+
   function getInteractables() {
+    if (Game.chapter === 2) {
+      return Game.zone === 'cave' ? getInteractablesCave() : getInteractablesOutdoor2();
+    }
+    return getInteractablesChapter1();
+  }
+
+  function getInteractablesChapter1() {
     const w = WORLD;
     const list = [
       { id: 'wagner', x: w.npcSpawns.wagner.x, y: w.npcSpawns.wagner.y, r: INTERACT_RADIUS, marker: '💬', handler: talkWagner },
@@ -89,6 +123,35 @@
     return list;
   }
 
+  function getInteractablesOutdoor2() {
+    const w = WORLD2;
+    const list = [
+      { id: 'wagner2', x: w.npcSpawns.wagner.x, y: w.npcSpawns.wagner.y, r: INTERACT_RADIUS, marker: '💬', handler: talkWagner2 },
+      { id: 'lia2', x: w.npcSpawns.lia.x, y: w.npcSpawns.lia.y, r: INTERACT_RADIUS, marker: '💬', handler: talkLia2 },
+      { id: 'jasmim2', x: w.npcSpawns.jasmim.x, y: w.npcSpawns.jasmim.y, r: INTERACT_RADIUS, marker: '💬', handler: talkJasmim2 },
+      { id: 'pedra2', x: w.npcSpawns.pedra2.x, y: w.npcSpawns.pedra2.y, r: INTERACT_RADIUS, marker: '💬', handler: talkPedra2 },
+      {
+        id: 'caveMouth', x: w.caveMouth.x, y: w.caveMouth.y, r: w.caveMouth.r,
+        marker: () => (Game.flags.caveCompleted ? null : '❓'), handler: interactCaveMouth
+      }
+    ];
+    if (!Game.flags.tigrosoMet) {
+      const center = tigrosoZoneCenter();
+      list.push({ id: 'tigrosoZone', x: center.x, y: center.y, r: 140, marker: '❓', handler: startTigrosoEncounter });
+    }
+    if (Game.flags.tigrosoMet && !Game.flags.tigrosoPuzzleSolved) {
+      const p = w.tigroso.puzzle;
+      list.push({ id: 'flowerPuzzle', x: p.flower.x, y: p.flower.y, r: 34, marker: '✨', handler: () => interactPuzzleStep('flower') });
+      list.push({ id: 'noisePuzzle', x: p.noiseRock.x, y: p.noiseRock.y, r: 34, marker: '✨', handler: () => interactPuzzleStep('noiseRock') });
+      list.push({ id: 'vinePuzzle', x: p.vine.x, y: p.vine.y, r: 34, marker: '✨', handler: () => interactPuzzleStep('vine') });
+    }
+    return list;
+  }
+
+  function getInteractablesCave() {
+    return [];
+  }
+
   function nearestInteractable() {
     const p = Game.player;
     let best = null, bestD = Infinity;
@@ -104,9 +167,9 @@
   function speakerDisplayName(key) { return SPEAKER_NAMES[key] || key; }
 
   function playDialogue(key, onComplete) {
-    const queue = DIALOGUES[key];
+    const queue = DIALOGUES[key] || DIALOGUES2[key];
     if (!queue || !queue.length) { if (onComplete) onComplete(); return; }
-    if (Game.state !== 'cutscene') Game.stateBeforeOverlay = Game.state;
+    if (Game.state !== 'cutscene' && Game.state !== 'transition') Game.stateBeforeOverlay = Game.state;
     Game.state = 'dialogue';
     Game.dialogue.queue = queue;
     Game.dialogue.index = -1;
@@ -158,9 +221,18 @@
 
   /* ---------------- interações ---------------- */
   function fullSave() {
+    // dentro da gruta o save sempre guarda a entrada como ponto seguro de retorno
+    // (nunca salva Júlia no meio da sequência da aranha).
+    let pos = { x: Game.player.x, y: Game.player.y };
+    let zone = Game.zone;
+    if (Game.chapter === 2 && Game.zone === 'cave') {
+      pos = outsideCaveMouthPos();
+      zone = 'outdoor2';
+    }
     SaveSystem.save({
-      chapter: 1,
-      playerPos: { x: Game.player.x, y: Game.player.y },
+      chapter: Game.chapter,
+      zone,
+      playerPos: pos,
       flags: Game.flags,
       inventory: Game.inventory
     });
@@ -174,6 +246,7 @@
   }
 
   function updateQuestBanner() {
+    if (Game.chapter === 2) { updateQuestBannerChapter2(); return; }
     const f = Game.flags;
     let text = '';
     if (!f.hasMap) {
@@ -192,6 +265,28 @@
       text = 'Capítulo concluído!';
     } else {
       text = 'Fim do Capítulo 1. Mais aventuras em breve!';
+    }
+    hud.questBanner.textContent = text;
+    hud.questBanner.classList.add('show');
+  }
+
+  function updateQuestBannerChapter2() {
+    const f = Game.flags;
+    let text = '';
+    if (Game.zone === 'cave') {
+      text = 'Use a lanterna com cuidado. A aranha acorda se você ficar com a luz acesa por perto.';
+    } else if (!f.tigrosoMet) {
+      text = 'Explore a área e descubra o que Tigroso está escondendo.';
+    } else if (!f.tigrosoPuzzleSolved) {
+      text = 'Distraia o Tigroso: descubra a ordem certa entre a flor, o barulho e o cipó.';
+    } else if (!f.caveEntered) {
+      text = 'Leve a lanterna até a entrada da gruta.';
+    } else if (!f.caveCompleted) {
+      text = 'Atravesse a gruta sem acordar a aranha.';
+    } else if (!f.chapter2Complete) {
+      text = 'Capítulo concluído!';
+    } else {
+      text = 'Fim do Capítulo 2. Mais aventuras em breve!';
     }
     hud.questBanner.textContent = text;
     hud.questBanner.classList.add('show');
@@ -323,7 +418,7 @@
         playDialogue('chapterEndNarration', () => {
           Game.flags.chapterComplete = true;
           fullSave();
-          showChapterEnd();
+          showChapterEnd(1);
         });
       }, 300);
     });
@@ -362,9 +457,9 @@
       const dx = v.x * PLAYER_SPEED * dt;
       const dy = v.y * PLAYER_SPEED * dt;
       const nx = Game.player.x + dx;
-      if (!Collision.blocked(nx, Game.player.y, PLAYER_RADIUS)) Game.player.x = nx;
+      if (!Collision.blocked(nx, Game.player.y, PLAYER_RADIUS, Game.world)) Game.player.x = nx;
       const ny = Game.player.y + dy;
-      if (!Collision.blocked(Game.player.x, ny, PLAYER_RADIUS)) Game.player.y = ny;
+      if (!Collision.blocked(Game.player.x, ny, PLAYER_RADIUS, Game.world)) Game.player.y = ny;
     } else {
       Game.player.walkPhase = 0;
     }
@@ -372,12 +467,13 @@
 
   function updateCamera() {
     const vw = canvas.clientWidth, vh = canvas.clientHeight;
+    const w = Game.world;
     let cx = Game.player.x - vw / 2;
     let cy = Game.player.y - vh / 2;
-    cx = clamp(cx, 0, Math.max(0, WORLD.width - vw));
-    cy = clamp(cy, 0, Math.max(0, WORLD.height - vh));
-    if (WORLD.width < vw) cx = (WORLD.width - vw) / 2;
-    if (WORLD.height < vh) cy = (WORLD.height - vh) / 2;
+    cx = clamp(cx, 0, Math.max(0, w.width - vw));
+    cy = clamp(cy, 0, Math.max(0, w.height - vh));
+    if (w.width < vw) cx = (w.width - vw) / 2;
+    if (w.height < vh) cy = (w.height - vh) / 2;
     Game.camera.x = cx; Game.camera.y = cy;
   }
 
@@ -402,7 +498,7 @@
     const left = Game.camera.x - 20, right = Game.camera.x + vw + 20;
     const top = Game.camera.y - 20, bottom = Game.camera.y + vh + 20;
     ctx.fillStyle = 'rgba(60,100,40,0.18)';
-    for (const g of WORLD.grassDots) {
+    for (const g of Game.world.grassDots || []) {
       if (g.x < left || g.x > right || g.y < top || g.y > bottom) continue;
       ctx.beginPath();
       ctx.ellipse(g.x, g.y, 2 + g.tone * 2, 1 + g.tone, 0, 0, Math.PI * 2);
@@ -411,7 +507,8 @@
   }
 
   function drawPath() {
-    const pts = WORLD.pathPoints;
+    const pts = Game.world.pathPoints;
+    if (!pts || !pts.length) return;
     ctx.strokeStyle = 'rgba(216,193,140,0.55)';
     ctx.lineWidth = 34;
     ctx.lineCap = 'round';
@@ -646,7 +743,7 @@
 
   function drawCritters() {
     ctx.save();
-    for (const c of WORLD.critters) {
+    for (const c of Game.world.critters || []) {
       const t = Game.time;
       if (c.type === 'bird') {
         const x = c.x + Math.sin(t * 0.6 + c.x) * 30;
@@ -680,7 +777,7 @@
     }
   }
 
-  function drawEntities() {
+  function drawEntitiesChapter1() {
     const t = Game.time;
     const entries = [];
     for (const tr of WORLD.trees) entries.push({ y: tr.y, draw: () => drawTree(tr) });
@@ -723,6 +820,14 @@
   }
 
   function render() {
+    if (Game.chapter === 2) {
+      if (Game.zone === 'cave') renderCave(); else renderOutdoor2();
+      return;
+    }
+    renderChapter1();
+  }
+
+  function renderChapter1() {
     const vw = canvas.clientWidth, vh = canvas.clientHeight;
     ctx.clearRect(0, 0, vw, vh);
     ctx.save();
@@ -737,10 +842,454 @@
     drawFlowerPatch();
     drawPawTrail();
     drawBigTree();
-    drawEntities();
+    drawEntitiesChapter1();
     drawCritters();
     drawMarkers();
 
+    ctx.restore();
+  }
+
+  /* =================================================
+     CAPÍTULO 2 — A Gruta Adormecida
+     ================================================= */
+
+  /* ---- diálogos com NPCs (versão capítulo 2) ---- */
+  function talkWagner2() {
+    if (!Game.flags.metWagner2) playDialogue('wagner2First', () => { Game.flags.metWagner2 = true; fullSave(); });
+    else playDialogue('wagner2Repeat');
+  }
+  function talkLia2() {
+    if (!Game.flags.metLia2) playDialogue('lia2First', () => { Game.flags.metLia2 = true; fullSave(); });
+    else playDialogue('lia2Repeat');
+  }
+  function talkJasmim2() {
+    if (!Game.flags.metJasmim2) playDialogue('jasmim2First', () => { Game.flags.metJasmim2 = true; fullSave(); });
+    else playDialogue('jasmim2Repeat');
+  }
+  function talkPedra2() {
+    playDialogue('pedra2Repeat');
+  }
+
+  /* ---- Tigroso: encontro e quebra-cabeça ---- */
+  function tigrosoZoneCenter() {
+    const a = WORLD2.tigroso.anchors;
+    return { x: (a[0].x + a[1].x + a[2].x) / 3, y: (a[0].y + a[1].y + a[2].y) / 3 + 80 };
+  }
+
+  function startTigrosoEncounter() {
+    if (Game.flags.tigrosoMet) return;
+    playDialogue('tigrosoEncounter', () => {
+      Game.flags.tigrosoMet = true;
+      Game.tigroso.nextIndex = 0;
+      Game.tigroso.idleTimer = 0;
+      Game.tigroso.hintsGiven = 0;
+      fullSave();
+      updateQuestBanner();
+    });
+  }
+
+  function interactPuzzleStep(step) {
+    if (!Game.flags.tigrosoMet || Game.flags.tigrosoPuzzleSolved) return;
+    const order = WORLD2.tigroso.order;
+    const expected = order[Game.tigroso.nextIndex];
+    if (step !== expected) {
+      playDialogue('tigrosoOutOfOrder');
+      return;
+    }
+    Game.tigroso.idleTimer = 0;
+    Game.tigroso.nextIndex++;
+    Game.tigroso.anchorIndex = Math.min(Game.tigroso.nextIndex, WORLD2.tigroso.anchors.length - 1);
+
+    if (step === 'flower') { playDialogue('tigrosoStepFlower'); return; }
+    if (step === 'noiseRock') { playDialogue('tigrosoStepNoise'); return; }
+    // último passo (vine) resolve o desafio
+    playDialogue('tigrosoSolved', () => {
+      Game.flags.tigrosoPuzzleSolved = true;
+      Game.flags.hasFlashlight = true;
+      Game.inventory.push('lanterna');
+      fullSave();
+      updateQuestBanner();
+      showItemFound('🔦', 'Lanterna');
+      AudioManager.playOnce('discover', 0.5);
+    });
+  }
+
+  function updateTigroso(dt) {
+    if (!Game.flags.tigrosoMet || Game.flags.tigrosoPuzzleSolved) return;
+    Game.tigroso.idleTimer += dt;
+    if (Game.tigroso.idleTimer > 12) {
+      const hintKeys = ['tigrosoHint1', 'tigrosoHint2', 'tigrosoHint3'];
+      const key = hintKeys[Math.min(Game.tigroso.nextIndex, 2)];
+      if (DIALOGUES2[key]) showToast(DIALOGUES2[key][0].text, 3600);
+      Game.tigroso.idleTimer = 0;
+    }
+  }
+
+  /* ---- entrada da gruta ---- */
+  function outsideCaveMouthPos() {
+    return { x: WORLD2.caveMouth.x - 110, y: WORLD2.caveMouth.y };
+  }
+
+  function interactCaveMouth() {
+    if (Game.flags.caveCompleted) return;
+    if (!Game.flags.hasFlashlight) {
+      playDialogue('caveNoLight', () => {
+        const p = outsideCaveMouthPos();
+        Game.player.x = p.x; Game.player.y = p.y;
+        updateQuestBanner();
+      });
+      return;
+    }
+    playDialogue('caveEnterWithLight', () => enterCave());
+  }
+
+  function enterCave() {
+    Game.zone = 'cave';
+    Game.world = CAVE;
+    Game.player.x = CAVE.spawn.x;
+    Game.player.y = CAVE.spawn.y;
+    Game.flashlightOn = false;
+    resetSpider();
+    Game.flags.caveEntered = true;
+    fullSave();
+    updateQuestBanner();
+    hud.flashlight.hidden = false;
+  }
+
+  function exitCave() {
+    Game.zone = 'outdoor2';
+    Game.world = WORLD2;
+    Game.player.x = WORLD2.afterCave.pawMarks.x - 90;
+    Game.player.y = WORLD2.afterCave.pawMarks.y;
+    Game.flashlightOn = false;
+    hud.flashlight.hidden = true;
+    Game.flags.caveCompleted = true;
+    fullSave();
+    updateQuestBanner();
+    Game.cutscene.tigrosoShadow = 0;
+    playDialogue('caveEnd', () => {
+      setTimeout(() => {
+        Game.cutscene.tigrosoShadow = 4.5; // segundos de sombra visível ao longe
+        playDialogue('chapter2EndNarration', () => {
+          Game.flags.chapter2Complete = true;
+          fullSave();
+          showChapterEnd(2);
+        });
+      }, 300);
+    });
+  }
+
+  /* ---- lanterna ---- */
+  function toggleFlashlight() {
+    if (Game.zone !== 'cave' || Game.state !== 'playing') return;
+    Game.flashlightOn = !Game.flashlightOn;
+    hud.flashlight.classList.toggle('on', Game.flashlightOn);
+    AudioManager.playOnce('interact', 0.2);
+  }
+
+  function showItemFound(icon, name) {
+    hud.itemFoundIcon.textContent = icon;
+    hud.itemFoundText.textContent = name;
+    hud.itemFound.hidden = false;
+    if (Game.itemFoundTimer) clearTimeout(Game.itemFoundTimer);
+    Game.itemFoundTimer = setTimeout(() => { hud.itemFound.hidden = true; }, 2600);
+  }
+
+  /* ---- aranha: SLEEPING / WAKING / AWAKE(searching) / ATTACKING ---- */
+  function updateSpider(dt) {
+    const sp = CAVE.spider;
+    const s = Game.spider;
+    const inDanger = Math.abs(Game.player.x - sp.x) < sp.dangerRadius;
+
+    if (s.state === 'sleeping') {
+      if (inDanger && Game.flashlightOn) {
+        s.litTimer += dt;
+        if (s.litTimer >= s.wakeThreshold) {
+          s.state = 'waking';
+          s.reactionTimer = 0;
+        }
+      } else {
+        s.litTimer = 0;
+      }
+    } else if (s.state === 'waking') {
+      s.reactionTimer += dt;
+      const reacted = !Game.flashlightOn && !Game.player.walking;
+      if (reacted) {
+        s.state = 'searching';
+        s.searchTimer = 0;
+      } else if (s.reactionTimer >= s.reactionWindow) {
+        triggerSpiderAttack();
+      }
+    } else if (s.state === 'searching') {
+      if (Game.flashlightOn || Game.player.walking) {
+        triggerSpiderAttack();
+      } else {
+        s.searchTimer += dt;
+        if (s.searchTimer >= sp.searchDuration) {
+          s.state = 'sleeping';
+          s.litTimer = 0;
+          s.wakeThreshold = randRange(sp.sleepMin, sp.sleepMax);
+        }
+      }
+    } else if (s.state === 'attacking') {
+      s.attackTimer += dt;
+      if (s.attackTimer > 0.85) showGameOver();
+    }
+  }
+
+  function triggerSpiderAttack() {
+    if (Game.spider.state === 'attacking') return;
+    Game.spider.state = 'attacking';
+    Game.spider.attackTimer = 0;
+    AudioManager.playOnce('interact', 0.4);
+  }
+
+  function showGameOver() {
+    Game.state = 'gameover';
+    overlays.gameover.hidden = false;
+  }
+
+  function retryFromCheckpoint() {
+    overlays.gameover.hidden = true;
+    Game.player.x = CAVE.spawn.x;
+    Game.player.y = CAVE.spawn.y;
+    Game.flashlightOn = false;
+    hud.flashlight.classList.remove('on');
+    resetSpider();
+    Game.state = 'playing';
+  }
+
+  /* ---- transição de capítulo ---- */
+  function startChapter2() {
+    overlays.end.hidden = true;
+    Game.chapter = 2;
+    Game.zone = 'outdoor2';
+    Game.world = WORLD2;
+    Game.player.x = WORLD2.spawn.x;
+    Game.player.y = WORLD2.spawn.y;
+    Game.flags.chapter2Started = true;
+    fullSave();
+    updateQuestBanner();
+    refreshChapterTag();
+
+    Game.state = 'transition';
+    el('transition-title').textContent = 'CAPÍTULO 2';
+    el('transition-subtitle').textContent = 'A Gruta Adormecida';
+    overlays.transition.hidden = false;
+    setTimeout(() => {
+      overlays.transition.hidden = true;
+      Game.state = 'playing';
+      if (!Game.flags.chapter2IntroDone) {
+        playDialogue('chapter2Intro', () => { Game.flags.chapter2IntroDone = true; fullSave(); });
+      }
+    }, 2300);
+  }
+
+  /* ---- desenho: área externa (Capítulo 2) ---- */
+  function drawTigrosoPuzzleProps() {
+    if (!Game.flags.tigrosoMet || Game.flags.tigrosoPuzzleSolved) return;
+    const p = WORLD2.tigroso.puzzle;
+    const t = Game.time;
+
+    // flor brilhante
+    drawFlower(p.flower.x, p.flower.y, true, t);
+
+    // pedra barulhenta
+    ctx.save();
+    ctx.translate(p.noiseRock.x, p.noiseRock.y);
+    ctx.fillStyle = '#8a7a8f';
+    ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.5 + Math.sin(t * 5) * 0.3;
+    ctx.font = '14px sans-serif'; ctx.fillStyle = '#fff9d6';
+    ctx.fillText('♪', -5, -14);
+    ctx.restore();
+
+    // cipó
+    ctx.save();
+    ctx.strokeStyle = '#4f7f4a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(p.vine.x - 14, p.vine.y - 30);
+    ctx.quadraticCurveTo(p.vine.x + 10, p.vine.y - 8 + Math.sin(t * 2) * 4, p.vine.x - 6, p.vine.y + 18);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTigrosoEntity() {
+    if (!Game.flags.tigrosoMet || Game.flags.tigrosoPuzzleSolved) return;
+    const anchors = WORLD2.tigroso.anchors;
+    const a = anchors[Math.min(Game.tigroso.anchorIndex, anchors.length - 1)];
+    const t = Game.time;
+    const x = a.x + Math.sin(t * 1.1) * 22;
+    const y = a.y + Math.cos(t * 1.6) * 12;
+    drawCharacter(ctx, 'tigroso', x, y, { scale: 0.85, wingPhase: t * 3 });
+    if (!Game.flags.hasFlashlight) {
+      drawCharacter(ctx, 'lanterna', x + 26, y - 6, { scale: 0.7, on: false });
+    }
+  }
+
+  function drawCaveMouthVisual() {
+    const m = WORLD2.caveMouth;
+    ctx.save();
+    ctx.fillStyle = '#2a2430';
+    ctx.beginPath(); ctx.ellipse(m.x, m.y, 70, 95, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a4038';
+    ctx.beginPath(); ctx.ellipse(m.x, m.y, 92, 118, 0, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = '#0c0810';
+    ctx.beginPath(); ctx.ellipse(m.x, m.y + 6, 54, 78, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawAfterCaveExtras() {
+    const ac = WORLD2.afterCave;
+    if (Game.flags.caveCompleted) {
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      drawPawPrint(ac.pawMarks.x, ac.pawMarks.y, Game.time);
+      drawPawPrint(ac.pawMarks.x + 18, ac.pawMarks.y + 10, Game.time);
+      drawPawPrint(ac.pawMarks.x + 38, ac.pawMarks.y + 4, Game.time);
+      ctx.restore();
+    }
+    if (Game.cutscene.tigrosoShadow > 0) {
+      ctx.save();
+      ctx.globalAlpha = clamp(Game.cutscene.tigrosoShadow / 1.2, 0, 0.55);
+      ctx.fillStyle = '#1a1420';
+      const sx = ac.tigrosoShadowSpot.x + Math.sin(Game.time) * 30;
+      ctx.beginPath();
+      ctx.ellipse(sx, ac.tigrosoShadowSpot.y, 36, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawEntitiesOutdoor2() {
+    const entries = [];
+    for (const tr of WORLD2.trees) entries.push({ y: tr.y, draw: () => drawTree(tr) });
+    for (const r of WORLD2.rocks) entries.push({ y: r.y, draw: () => drawRock(r) });
+
+    entries.push({ y: WORLD2.npcSpawns.wagner.y, draw: () => drawCharacter(ctx, 'wagner', WORLD2.npcSpawns.wagner.x, WORLD2.npcSpawns.wagner.y, {}) });
+    entries.push({ y: WORLD2.npcSpawns.lia.y, draw: () => drawCharacter(ctx, 'lia', WORLD2.npcSpawns.lia.x, WORLD2.npcSpawns.lia.y, {}) });
+    entries.push({ y: WORLD2.npcSpawns.jasmim.y, draw: () => drawCharacter(ctx, 'jasmim', WORLD2.npcSpawns.jasmim.x, WORLD2.npcSpawns.jasmim.y, {}) });
+    entries.push({ y: WORLD2.npcSpawns.pedra2.y, draw: () => drawCharacter(ctx, 'pedra', WORLD2.npcSpawns.pedra2.x, WORLD2.npcSpawns.pedra2.y, {}) });
+
+    if (Game.flags.tigrosoMet && !Game.flags.tigrosoPuzzleSolved) {
+      const anchors = WORLD2.tigroso.anchors;
+      const a = anchors[Math.min(Game.tigroso.anchorIndex, anchors.length - 1)];
+      entries.push({ y: a.y + 60, draw: drawTigrosoEntity });
+    }
+
+    if (Game.flags.caveCompleted && Game.state === 'dialogue') {
+      const spot = WORLD2.afterCave.macaquildoSpot;
+      entries.push({ y: spot.y, draw: () => drawCharacter(ctx, 'macaquildo', spot.x, spot.y, { scale: 0.9 }) });
+    }
+
+    entries.push({
+      y: Game.player.y,
+      draw: () => drawCharacter(ctx, 'julia', Game.player.x, Game.player.y, {
+        facing: Game.player.facing, walkPhase: Game.player.walking ? Game.player.walkPhase : 0
+      })
+    });
+
+    entries.sort((a, b) => a.y - b.y);
+    for (const e of entries) e.draw();
+  }
+
+  function renderOutdoor2() {
+    const vw = canvas.clientWidth, vh = canvas.clientHeight;
+    ctx.clearRect(0, 0, vw, vh);
+    ctx.save();
+    ctx.translate(-Game.camera.x, -Game.camera.y);
+
+    drawBackground();
+    drawPath();
+    for (const f of WORLD2.flowers) drawFlower(f.x, f.y, false, Game.time);
+    drawCaveMouthVisual();
+    drawTigrosoPuzzleProps();
+    drawAfterCaveExtras();
+    drawEntitiesOutdoor2();
+    drawCritters();
+    drawMarkers();
+
+    ctx.restore();
+  }
+
+  /* ---- desenho: interior da gruta ---- */
+  function drawCaveBackground() {
+    const vw = canvas.clientWidth, vh = canvas.clientHeight;
+    const grad = ctx.createLinearGradient(0, Game.camera.y, 0, Game.camera.y + vh);
+    grad.addColorStop(0, '#241f2c');
+    grad.addColorStop(1, '#140f1a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(Game.camera.x, Game.camera.y, vw, vh);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(Game.camera.x, 0, vw, 40);
+    ctx.fillRect(Game.camera.x, CAVE.height - 40, vw, 40);
+
+    for (const r of CAVE.decorRocks) {
+      ctx.save();
+      ctx.fillStyle = '#332a3d';
+      ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    for (const d of CAVE.drips) {
+      const drop = (Game.time * 60 + d.phase * 40) % 120;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(140,180,220,0.35)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(d.x, drop); ctx.lineTo(d.x, drop + 8); ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const m of CAVE.mushrooms) {
+      const glow = 0.4 + Math.sin(Game.time * 1.5 + m.x) * 0.2;
+      ctx.save();
+      ctx.globalAlpha = glow;
+      ctx.fillStyle = '#7ee7c8';
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawSpiderEntity() {
+    const sp = CAVE.spider;
+    const s = Game.spider;
+    const sleeping = s.state === 'sleeping';
+    const key = sleeping ? 'aranha-dormindo' : 'aranha-acordada';
+    const jitter = s.state === 'attacking' ? Math.sin(Game.time * 40) * 6 : 0;
+    const attackApproach = s.state === 'attacking' ? Math.min(1, s.attackTimer / 0.85) * 40 : 0;
+    const dir = Game.player.x < sp.x ? -1 : 1;
+    drawCharacter(ctx, key, sp.x + jitter - dir * attackApproach, sp.y, {
+      scale: s.state === 'attacking' ? 1.15 : 1
+    });
+  }
+
+  function renderCave() {
+    const vw = canvas.clientWidth, vh = canvas.clientHeight;
+    ctx.clearRect(0, 0, vw, vh);
+    ctx.save();
+    ctx.translate(-Game.camera.x, -Game.camera.y);
+
+    drawCaveBackground();
+    drawSpiderEntity();
+    drawCharacter(ctx, 'julia', Game.player.x, Game.player.y, {
+      facing: Game.player.facing, walkPhase: Game.player.walking ? Game.player.walkPhase : 0
+    });
+
+    ctx.restore();
+
+    // escuridão em espaço de tela (independe da câmera)
+    const px = Game.player.x - Game.camera.x, py = Game.player.y - Game.camera.y;
+    const radius = Game.flashlightOn ? 190 : 60;
+    ctx.save();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, vw, vh);
+    ctx.globalCompositeOperation = 'destination-out';
+    const grad = ctx.createRadialGradient(px, py - 10, radius * 0.15, px, py - 10, radius);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(px, py - 10, radius, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
@@ -752,6 +1301,14 @@
 
     if (Game.state === 'playing') {
       updatePlayer(dt);
+      if (Game.chapter === 2) {
+        if (Game.zone === 'outdoor2') {
+          updateTigroso(dt);
+        } else if (Game.zone === 'cave') {
+          updateSpider(dt);
+          if (Game.player.x > CAVE.exitZone.x - CAVE.exitZone.r) exitCave();
+        }
+      }
     }
     updateCamera();
 
@@ -792,6 +1349,9 @@
     SaveSystem.clear();
     Game.flags = SaveSystem.defaultData().flags;
     Game.inventory = [];
+    Game.chapter = 1;
+    Game.zone = 'outdoor';
+    Game.world = WORLD;
     Game.player.x = WORLD.spawn.x;
     Game.player.y = WORLD.spawn.y;
     startPlaying();
@@ -802,18 +1362,43 @@
     const data = SaveSystem.load();
     Game.flags = data.flags;
     Game.inventory = data.inventory || [];
-    Game.player.x = data.playerPos.x;
-    Game.player.y = data.playerPos.y;
-    if (Collision.blocked(Game.player.x, Game.player.y, PLAYER_RADIUS)) {
-      Game.player.x = WORLD.spawn.x; Game.player.y = WORLD.spawn.y;
+
+    if (Game.flags.chapterComplete && !Game.flags.chapter2Started) {
+      // Capítulo 1 já tinha sido concluído numa sessão anterior: continua para o Capítulo 2.
+      Game.chapter = 1;
+      showScreen('game');
+      resizeCanvas();
+      startChapter2();
+      return;
     }
-    startPlaying();
+
+    Game.chapter = data.chapter || 1;
+    if (Game.chapter === 2) {
+      Game.zone = 'outdoor2';
+      Game.world = WORLD2;
+      Game.player.x = data.playerPos.x;
+      Game.player.y = data.playerPos.y;
+      if (Collision.blocked(Game.player.x, Game.player.y, PLAYER_RADIUS, Game.world)) {
+        Game.player.x = WORLD2.spawn.x; Game.player.y = WORLD2.spawn.y;
+      }
+      startPlayingChapter2();
+    } else {
+      Game.zone = 'outdoor';
+      Game.world = WORLD;
+      Game.player.x = data.playerPos.x;
+      Game.player.y = data.playerPos.y;
+      if (Collision.blocked(Game.player.x, Game.player.y, PLAYER_RADIUS, Game.world)) {
+        Game.player.x = WORLD.spawn.x; Game.player.y = WORLD.spawn.y;
+      }
+      startPlaying();
+    }
   }
 
   function startPlaying() {
     showScreen('game');
     Game.state = 'playing';
     resizeCanvas();
+    refreshChapterTag();
     updateQuestBanner();
     document.querySelectorAll('.symbol-slot').forEach(s => s.classList.remove('found'));
     if (Game.flags.symbolEstrela) markSymbolSlot('estrela');
@@ -822,11 +1407,39 @@
     if (Game.flags.metMacaquildo) Game.cutscene.macaquildoStage = 'full';
   }
 
-  function showChapterEnd() {
+  function startPlayingChapter2() {
+    showScreen('game');
+    Game.state = 'playing';
+    resizeCanvas();
+    refreshChapterTag();
+    updateQuestBanner();
+    hud.flashlight.hidden = true;
+    hud.flashlight.classList.remove('on');
+    Game.flashlightOn = false;
+  }
+
+  function showChapterEnd(chapterNum) {
     Game.state = 'chapterend';
-    el('end-text').textContent = 'Júlia descobriu um mapa secreto, encontrou os três símbolos escondidos perto do rio ' +
-      'e conheceu Macaquildo — guardião alado e um pouco misterioso. Mas o mapa era só uma pequena parte de algo bem maior...';
+    if (chapterNum === 2) {
+      el('end-title').textContent = 'CAPÍTULO 2 CONCLUÍDO';
+      el('end-text').textContent = 'Júlia conquistou a lanterna, enganou o Tigroso e atravessou a Gruta Adormecida sem ' +
+        'acordar a aranha gigante. Mas aquela sombra voando ao longe promete mais uma aventura pela frente...';
+      el('btn-end-next').hidden = true;
+    } else {
+      el('end-title').textContent = 'CAPÍTULO 1 CONCLUÍDO';
+      el('end-text').textContent = 'Júlia descobriu um mapa secreto, encontrou os três símbolos escondidos perto do rio ' +
+        'e conheceu Macaquildo — guardião alado e um pouco misterioso. Mas o mapa era só uma pequena parte de algo bem maior...';
+      el('btn-end-next').hidden = false;
+    }
     overlays.end.hidden = false;
+  }
+
+  function refreshChapterTag() {
+    const tag = el('menu-chapter-tag');
+    if (!tag) return;
+    if (Game.flags && Game.flags.chapter2Complete) tag.textContent = 'Capítulo 2 concluído — mais em breve';
+    else if (Game.flags && Game.flags.chapter2Started) tag.textContent = 'Capítulo 2 — A Gruta Adormecida';
+    else tag.textContent = 'Capítulo 1 — O Mapa Sob a Pedra';
   }
 
   /* ---------------- overlays ---------------- */
@@ -854,7 +1467,7 @@
   }
 
   function openPause() {
-    if (Game.state === 'menu' || Game.state === 'howto' || Game.state === 'paused' || Game.state === 'chapterend') return;
+    if (['menu', 'howto', 'paused', 'chapterend', 'transition', 'gameover'].includes(Game.state)) return;
     Game.stateBeforeOverlay = Game.state;
     Game.state = 'paused';
     overlays.pause.hidden = false;
@@ -870,6 +1483,7 @@
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
     Game.keys.add(k);
     if (k === ' ' || k === 'e') tryInteract();
+    if (k === 'l') toggleFlashlight();
     if (k === 'escape') {
       if (Game.state === 'paused') closePause();
       else if (Game.state === 'mapoverlay') closeMap();
@@ -958,7 +1572,13 @@
     Game.state = 'menu';
     showScreen('menu');
     refreshContinueButton();
+    refreshChapterTag();
   });
+  el('btn-end-next').addEventListener('click', () => { startChapter2(); });
+
+  hud.flashlight.addEventListener('click', toggleFlashlight);
+  hud.flashlight.addEventListener('touchstart', e => { e.preventDefault(); AudioManager.unlockOnFirstInput(); toggleFlashlight(); }, { passive: false });
+  el('btn-retry').addEventListener('click', retryFromCheckpoint);
 
   hud.fullscreen.addEventListener('click', () => {
     const container = el('game-container');
@@ -988,7 +1608,8 @@
     refreshContinueButton();
     resizeCanvas();
     checkOrientation();
-    Game.flags = SaveSystem.defaultData().flags;
+    Game.flags = SaveSystem.hasSave() ? SaveSystem.load().flags : SaveSystem.defaultData().flags;
+    refreshChapterTag();
     requestAnimationFrame(t => { Game.lastTime = t; requestAnimationFrame(loop); });
   }
 
