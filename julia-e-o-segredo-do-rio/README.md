@@ -50,7 +50,7 @@ julia-e-o-segredo-do-rio/
 │                            capítulos compartilham o mesmo motor
 └── assets/
     ├── characters/        # PNGs dos personagens (ver abaixo)
-    ├── scenery/            # reservado para cenário em PNG, se um dia quiser
+    ├── scenery/            # fundos ilustrados (gruta) — ver seção da gruta abaixo
     └── audio/              # sons opcionais (placeholders silenciosos incluídos)
 ```
 
@@ -144,6 +144,13 @@ comportamento) foi redesenhada silenciosamente.
   `WORLD2.CAVE.spider` (`sleepMin/sleepMax`, `reactionMin/reactionMax`,
   `searchDuration`, `dangerRadius`) — ajuste ali se quiser a gruta mais
   fácil ou mais difícil.
+- **Fundo ilustrado:** `assets/scenery/cave-interior.jpg` é desenhado como
+  um "parallax" (cobre a tela inteira e desliza mais devagar que a câmera),
+  já que é uma única imagem panorâmica, não um ladrilho que se repete sem
+  emenda. `assets/scenery/cave-mouth.png` é a arte da entrada da gruta,
+  desenhada na posição de `WORLD2.caveMouth`. Se algum dia esses arquivos
+  não existirem, o jogo cai de volta no cenário desenhado por código em
+  `drawCaveBackground()`/`drawCaveMouthVisual()` — sem quebrar.
 
 ## Melhorias ideais para a próxima versão
 
