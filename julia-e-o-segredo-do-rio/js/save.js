@@ -8,6 +8,7 @@ const SaveSystem = (() => {
   function defaultData() {
     return {
       chapter: 1,
+      zone: 'outdoor',
       playerPos: { x: 300, y: 860 },
       flags: {
         introDone: false,
@@ -21,7 +22,20 @@ const SaveSystem = (() => {
         symbolPatas: false,
         mapReacted: false,
         metMacaquildo: false,
-        chapterComplete: false
+        chapterComplete: false,
+
+        // ---- Capítulo 2: A Gruta Adormecida ----
+        chapter2Started: false,
+        chapter2IntroDone: false,
+        metWagner2: false,
+        metLia2: false,
+        metJasmim2: false,
+        tigrosoMet: false,
+        tigrosoPuzzleSolved: false,
+        hasFlashlight: false,
+        caveEntered: false,
+        caveCompleted: false,
+        chapter2Complete: false
       },
       inventory: []
     };

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Júlia e o Segredo do Rio — Capítulo 1</title>
+<title>Júlia e o Segredo do Rio</title>
 <meta name="description" content="Uma aventura criada por Júlia.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌿%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/style.css">
@@ -21,7 +21,7 @@
     </div>
     <div class="menu-card">
       <h1 class="game-title">Júlia <span>e o</span> Segredo do Rio</h1>
-      <p class="chapter-tag">Capítulo 1 — O Mapa Sob a Pedra</p>
+      <p class="chapter-tag" id="menu-chapter-tag">Capítulo 1 — O Mapa Sob a Pedra</p>
       <div class="menu-buttons">
         <button id="btn-play" class="btn btn-primary">Jogar</button>
         <button id="btn-continue" class="btn btn-secondary" hidden>Continuar</button>
@@ -79,6 +79,12 @@
       <!-- toast de dica -->
       <div id="toast" class="toast" hidden></div>
 
+      <!-- item encontrado -->
+      <div id="item-found" class="item-found" hidden>
+        <div class="item-found-label">ITEM ENCONTRADO</div>
+        <div class="item-found-name"><span id="item-found-icon">🔦</span> <span id="item-found-text">Lanterna</span></div>
+      </div>
+
       <!-- caixa de diálogo -->
       <div id="dialogue-box" class="dialogue-box" hidden>
         <div class="dialogue-portrait">
@@ -102,6 +108,12 @@
       </div>
 
       <button id="btn-fullscreen" class="hud-btn fullscreen-btn" aria-label="Tela cheia">⛶</button>
+
+      <!-- lanterna (só aparece dentro da gruta) -->
+      <button id="btn-flashlight" class="flashlight-btn" hidden>
+        <span id="flashlight-icon">🔦</span>
+        <span class="flashlight-label">LUZ</span>
+      </button>
 
       <div id="rotate-hint" class="rotate-hint" hidden>
         <div style="font-size:2.6rem;">📱↻</div>
@@ -142,7 +154,25 @@
           <h2 id="end-title">CAPÍTULO 1 CONCLUÍDO</h2>
           <p id="end-text"></p>
           <p class="end-continua">CONTINUA...</p>
-          <button id="btn-end-menu" class="btn btn-primary">Voltar ao Menu</button>
+          <button id="btn-end-next" class="btn btn-primary" hidden>Continuar →</button>
+          <button id="btn-end-menu" class="btn btn-ghost">Voltar ao Menu</button>
+        </div>
+      </div>
+
+      <!-- transição de capítulo -->
+      <div id="chapter-transition" class="overlay transition-overlay" hidden>
+        <div class="transition-card">
+          <h2 id="transition-title">CAPÍTULO 2</h2>
+          <p id="transition-subtitle">A Gruta Adormecida</p>
+        </div>
+      </div>
+
+      <!-- game over (aranha) -->
+      <div id="gameover-overlay" class="overlay" hidden>
+        <div class="overlay-card">
+          <h2>😱</h2>
+          <p id="gameover-text">A aranha encontrou Júlia!</p>
+          <button id="btn-retry" class="btn btn-primary">Tentar Novamente</button>
         </div>
       </div>
     </div>
@@ -154,7 +184,9 @@
 <script src="js/audio.js"></script>
 <script src="js/characters.js"></script>
 <script src="js/world.js"></script>
+<script src="js/world2.js"></script>
 <script src="js/dialogues.js"></script>
+<script src="js/dialogues2.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

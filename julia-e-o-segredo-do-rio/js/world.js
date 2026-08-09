@@ -123,37 +123,59 @@ WORLD.rocks = [];
   }
 })();
 
-/* ---------------- colisão ---------------- */
+/* ---------------- colisão ----------------
+   Generalizada para aceitar qualquer "world" com o mesmo formato de WORLD,
+   assim o Capítulo 2 (área externa + gruta) reutiliza a mesma lógica.
+   Todos os campos além de width/height são opcionais. */
 const Collision = {
-  inRiver(x, y) {
-    const r = WORLD.river;
+  inRiver(x, y, world = WORLD) {
+    const r = world.river;
+    if (!r) return false;
     if (x < r.x || x > r.x + r.w || y < r.y || y > r.y + r.h) return false;
-    const b = WORLD.bridge;
-    if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) return false; // ponte é segura
+    const b = world.bridge;
+    if (b && x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) return false; // ponte é segura
     return true;
   },
-  hitsTree(x, y, radius) {
-    for (const t of WORLD.trees) {
+  hitsTree(x, y, radius, world = WORLD) {
+    for (const t of world.trees || []) {
       const dx = x - t.x, dy = y - (t.y + 6);
       if (dx * dx + dy * dy < (t.r * 0.6 + radius) * (t.r * 0.6 + radius)) return true;
     }
-    for (const t of WORLD.rocks) {
+    for (const t of world.rocks || []) {
       const dx = x - t.x, dy = y - t.y;
       if (dx * dx + dy * dy < (t.r + radius) * (t.r + radius)) return true;
     }
-    for (const b of WORLD.pawTrail.bushes) {
+    for (const b of (world.pawTrail && world.pawTrail.bushes) || []) {
       const dx = x - b.x, dy = y - b.y;
       if (dx * dx + dy * dy < (b.r * 0.55 + radius) * (b.r * 0.55 + radius)) return true;
     }
-    const bt = WORLD.bigTree;
-    const dbx = x - bt.x, dby = y - (bt.y + 10);
-    if (dbx * dbx + dby * dby < (bt.r * 0.7 + radius) * (bt.r * 0.7 + radius)) return true;
+    for (const b of world.bushes || []) {
+      const dx = x - b.x, dy = y - b.y;
+      if (dx * dx + dy * dy < (b.r * 0.55 + radius) * (b.r * 0.55 + radius)) return true;
+    }
+    if (world.bigTree) {
+      const bt = world.bigTree;
+      const dbx = x - bt.x, dby = y - (bt.y + 10);
+      if (dbx * dbx + dby * dby < (bt.r * 0.7 + radius) * (bt.r * 0.7 + radius)) return true;
+    }
     return false;
   },
-  blocked(x, y, radius) {
-    if (x < radius || x > WORLD.width - radius || y < radius + 40 || y > WORLD.height - radius) return true;
-    if (this.inRiver(x, y)) return true;
-    if (this.hitsTree(x, y, radius)) return true;
+  hitsWalls(x, y, radius, world = WORLD) {
+    for (const wall of world.walls || []) {
+      const cx = clampNum(x, wall.x, wall.x + wall.w);
+      const cy = clampNum(y, wall.y, wall.y + wall.h);
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy < radius * radius) return true;
+    }
+    return false;
+  },
+  blocked(x, y, radius, world = WORLD) {
+    if (x < radius || x > world.width - radius || y < radius + 40 || y > world.height - radius) return true;
+    if (this.inRiver(x, y, world)) return true;
+    if (this.hitsTree(x, y, radius, world)) return true;
+    if (this.hitsWalls(x, y, radius, world)) return true;
     return false;
   }
 };
+
+function clampNum(v, min, max) { return Math.max(min, Math.min(max, v)); }
